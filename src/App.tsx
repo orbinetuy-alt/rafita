@@ -1,5 +1,25 @@
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import './App.css'
+import { sendToRafita } from './lib/rafita'
+import { loadUser, clearUser, type RafitaUser } from './lib/auth'
+import AuthModal from './components/AuthModal'
+
+// Genera o recupera un sessionId único por navegador
+function getSessionId(): string {
+  const key = 'rafita_session_id'
+  let id = localStorage.getItem(key)
+  if (!id) {
+    if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+      id = crypto.randomUUID()
+    } else {
+      id = Math.random().toString(36).slice(2) + Date.now().toString(36)
+    }
+    localStorage.setItem(key, id)
+  }
+  return id
+}
+
+const SESSION_ID = getSessionId()
 
 const MODES = [
   { id: 'informant', label: 'Rafita Informant' },
@@ -34,18 +54,66 @@ const IconChat = () => (
   </svg>
 )
 
+// Icono logout
+const IconLogout = () => (
+  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/>
+  </svg>
+)
+
 function App() {
   const [input, setInput]           = useState('')
   const [activeMode, setActiveMode] = useState<string | null>(null)
   const [search, setSearch]         = useState('')
-  // null = no autenticado
-  const [user] = useState<string | null>(null)
+  const [loading, setLoading]       = useState(false)
+  const [error, setError]           = useState<string | null>(null)
+  const [user, setUser]             = useState<RafitaUser | null>(loadUser)
+  const [showAuth, setShowAuth]     = useState(false)
+  const inputRef = useRef<HTMLTextAreaElement>(null)
+  const messagesEndRef = useRef<HTMLDivElement>(null)
+  const [messages, setMessages] = useState<Array<{role: 'user'|'rafita', text: string}>>( [])
+  const [thinking, setThinking] = useState(false)
 
-  const handleSubmit = () => {
-    if (!input.trim()) return
-    // TODO: conectar al webhook de n8n
-    console.log('Enviar:', input, '| modo:', activeMode)
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [messages, thinking])
+
+  const handleLogin = (loggedUser: RafitaUser) => {
+    setUser(loggedUser)
+    setShowAuth(false)
+  }
+
+  const handleLogout = () => {
+    clearUser()
+    setUser(null)
+  }
+
+  const handleSubmit = async () => {
+    if (!input.trim() || loading) return
+    if (!user) { setShowAuth(true); return }
+    const message = input.trim()
     setInput('')
+    setError(null)
+    setLoading(true)
+    setThinking(true)
+    setMessages(prev => [...prev, { role: 'user', text: message }])
+    try {
+      const reply = await sendToRafita({
+        message,
+        sessionId: SESSION_ID,
+        mode: activeMode,
+        userId: user.userId,
+        token: user.token,
+      })
+      setMessages(prev => [...prev, { role: 'rafita', text: reply }])
+    } catch (err) {
+      setError('No pude conectarme con Rafita. Intenta de nuevo.')
+      console.error(err)
+    } finally {
+      setLoading(false)
+      setThinking(false)
+      inputRef.current?.focus()
+    }
   }
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -62,15 +130,21 @@ function App() {
   return (
     <div className="app">
 
+      {/* ── Modal de autenticación ── */}
+      {showAuth && (
+        <AuthModal
+          onSuccess={handleLogin}
+          onClose={() => setShowAuth(false)}
+        />
+      )}
+
       {/* ── Sidebar ── */}
       <aside className="sidebar">
-        {/* Nueva conversación */}
         <button className="sidebar-new-btn">
           <span className="sidebar-new-icon">+</span>
           Nueva conversación
         </button>
 
-        {/* Buscador */}
         <div className="sidebar-search">
           <IconSearch />
           <input
@@ -81,7 +155,6 @@ function App() {
           />
         </div>
 
-        {/* Recientes */}
         <div className="sidebar-section">
           <span className="sidebar-section-label">Recientes</span>
           <ul className="sidebar-chats">
@@ -97,15 +170,17 @@ function App() {
           </ul>
         </div>
 
-        {/* Perfil / Login */}
         <div className="sidebar-footer">
           {user ? (
             <div className="sidebar-profile">
-              <div className="sidebar-avatar">{user[0].toUpperCase()}</div>
-              <span>{user}</span>
+              <div className="sidebar-avatar">{user.name[0].toUpperCase()}</div>
+              <span className="sidebar-profile-name">{user.name}</span>
+              <button className="sidebar-logout-btn" onClick={handleLogout} title="Cerrar sesión">
+                <IconLogout />
+              </button>
             </div>
           ) : (
-            <button className="sidebar-login-btn">
+            <button className="sidebar-login-btn" onClick={() => setShowAuth(true)}>
               <IconUser />
               Iniciar sesión
             </button>
@@ -115,57 +190,159 @@ function App() {
 
       {/* ── Contenido principal ── */}
       <div className="main-wrapper">
-        {/* Header */}
         <header className="header">
           <span className="brand">Rafita AI</span>
-          <button className="header-login-btn">
-            <IconUser />
-            Iniciar sesión
-          </button>
+          {user ? (
+            <div className="header-user">
+              <div className="sidebar-avatar" style={{ width: 30, height: 30, fontSize: 13 }}>
+                {user.name[0].toUpperCase()}
+              </div>
+              <span className="header-user-name">{user.name}</span>
+            </div>
+          ) : (
+            <button className="header-login-btn" onClick={() => setShowAuth(true)}>
+              <IconUser />
+              Iniciar sesión
+            </button>
+          )}
         </header>
 
-        {/* Landing central */}
-        <main className="landing">
-          <h1 className="headline">¿Cómo puedo hacer tu viaje inolvidable?</h1>
+        {messages.length === 0 ? (
+          <main className="landing">
+            <h1 className="headline">¿Cómo puedo hacer tu viaje inolvidable?</h1>
 
-          {/* Input box */}
-          <div className="input-box">
-            <textarea
-              className="chat-input"
-              placeholder="Escríbeme lo que necesitas..."
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={handleKeyDown}
-              rows={3}
-            />
-            <div className="input-footer">
-              <button
-                className="send-btn"
-                onClick={handleSubmit}
-                disabled={!input.trim()}
-                aria-label="Enviar mensaje"
-              >
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                  <line x1="12" y1="19" x2="12" y2="5" />
-                  <polyline points="5 12 12 5 19 12" />
-                </svg>
-              </button>
+            <div className={`input-box${loading ? ' loading' : ''}`}>
+              <textarea
+                ref={inputRef}
+                className="chat-input"
+                placeholder={
+                  !user
+                    ? 'Inicia sesión para hablar con Rafita...'
+                    : 'Escríbeme lo que necesitas...'
+                }
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={handleKeyDown}
+                rows={3}
+                disabled={loading || !user}
+              />
+              <div className="input-footer">
+                {!user ? (
+                  <button className="send-btn-login" onClick={() => setShowAuth(true)}>
+                    <IconUser />
+                    Inicia sesión
+                  </button>
+                ) : (
+                  <button
+                    className="send-btn"
+                    onClick={handleSubmit}
+                    disabled={!input.trim() || loading}
+                    aria-label="Enviar mensaje"
+                  >
+                    {loading
+                      ? <span className="spinner" />
+                      : <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                          <line x1="12" y1="19" x2="12" y2="5" />
+                          <polyline points="5 12 12 5 19 12" />
+                        </svg>
+                    }
+                  </button>
+                )}
+              </div>
             </div>
-          </div>
 
-          {/* Modos */}
-          <div className="modes">
-            {MODES.map((mode) => (
-              <button
-                key={mode.id}
-                className={`mode-btn${activeMode === mode.id ? ' active' : ''}`}
-                onClick={() => setActiveMode(activeMode === mode.id ? null : mode.id)}
-              >
-                {mode.label}
-              </button>
-            ))}
-          </div>
-        </main>
+            {error && <p className="error-msg">{error}</p>}
+
+            <div className="modes">
+              {MODES.map((mode) => (
+                <button
+                  key={mode.id}
+                  className={`mode-btn${activeMode === mode.id ? ' active' : ''}`}
+                  onClick={() => setActiveMode(activeMode === mode.id ? null : mode.id)}
+                >
+                  {mode.label}
+                </button>
+              ))}
+            </div>
+          </main>
+        ) : (
+          <>
+            <div className="chat-view">
+              {messages.map((msg, i) => (
+                <div key={i} className={`chat-row chat-row--${msg.role}`}>
+                  {msg.role === 'rafita' && (
+                    <div className="chat-avatar chat-avatar--rafita">
+                      <img src="/favicon.png" alt="Rafita" />
+                    </div>
+                  )}
+                  <div className="chat-bubble">{msg.text}</div>
+                  {msg.role === 'user' && (
+                    <div className="chat-avatar chat-avatar--user">
+                      {user?.name[0].toUpperCase() ?? 'U'}
+                    </div>
+                  )}
+                </div>
+              ))}
+              {thinking && (
+                <div className="chat-row chat-row--rafita">
+                  <div className="chat-avatar chat-avatar--rafita">
+                    <img src="/favicon.png" alt="Rafita" />
+                  </div>
+                  <div className="chat-bubble chat-bubble--thinking">
+                    <span className="thinking-dot" />
+                    <span className="thinking-dot" />
+                    <span className="thinking-dot" />
+                  </div>
+                </div>
+              )}
+              <div ref={messagesEndRef} />
+            </div>
+
+            <div className="chat-bottom">
+              <div className="modes">
+                {MODES.map((mode) => (
+                  <button
+                    key={mode.id}
+                    className={`mode-btn${activeMode === mode.id ? ' active' : ''}`}
+                    onClick={() => setActiveMode(activeMode === mode.id ? null : mode.id)}
+                  >
+                    {mode.label}
+                  </button>
+                ))}
+              </div>
+              <div className={`input-box${loading ? ' loading' : ''}`}>
+                <textarea
+                  ref={inputRef}
+                  className="chat-input"
+                  placeholder={loading ? 'Rafita está pensando...' : 'Escríbeme lo que necesitas...'}
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  onKeyDown={handleKeyDown}
+                  rows={2}
+                  disabled={loading}
+                />
+                <div className="input-footer">
+                  <button
+                    className="send-btn"
+                    onClick={handleSubmit}
+                    disabled={!input.trim() || loading}
+                    aria-label="Enviar mensaje"
+                  >
+                    {loading
+                      ? <span className="spinner" />
+                      : <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                          <line x1="12" y1="19" x2="12" y2="5" />
+                          <polyline points="5 12 12 5 19 12" />
+                        </svg>
+                    }
+                  </button>
+                </div>
+              </div>
+
+              {error && <p className="error-msg">{error}</p>}
+            </div>
+          </>
+        )}
       </div>
 
     </div>
