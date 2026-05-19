@@ -27,11 +27,21 @@ const MODES = [
   { id: 'booking',   label: 'Rafita Booking'   },
 ]
 
-const RECENT_CHATS = [
-  'Hoteles en Lisboa para junio',
-  'Ruta por el Algarve 7 días',
-  'Vuelos baratos desde Madrid',
-]
+// ── Historial de conversaciones ──
+interface ChatMessage { role: 'user' | 'rafita'; text: string }
+interface Conversation { id: string; title: string; messages: ChatMessage[]; updatedAt: number }
+
+const CONV_KEY = 'rafita_conversations'
+
+function loadConversations(): Conversation[] {
+  try {
+    return JSON.parse(localStorage.getItem(CONV_KEY) ?? '[]')
+  } catch { return [] }
+}
+
+function saveConversations(convs: Conversation[]) {
+  localStorage.setItem(CONV_KEY, JSON.stringify(convs.slice(0, 50)))
+}
 
 // Icono búsqueda
 const IconSearch = () => (
@@ -54,6 +64,20 @@ const IconChat = () => (
   </svg>
 )
 
+// Icono hamburguesa
+const IconMenu = () => (
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/>
+  </svg>
+)
+
+// Icono cerrar (X)
+const IconClose = () => (
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+  </svg>
+)
+
 // Icono logout
 const IconLogout = () => (
   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -71,8 +95,11 @@ function App() {
   const [showAuth, setShowAuth]     = useState(false)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
-  const [messages, setMessages] = useState<Array<{role: 'user'|'rafita', text: string}>>( [])
+  const [messages, setMessages] = useState<ChatMessage[]>([])
   const [thinking, setThinking] = useState(false)
+  const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [conversations, setConversations] = useState<Conversation[]>(loadConversations)
+  const [currentConvId, setCurrentConvId] = useState<string | null>(null)
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -96,7 +123,9 @@ function App() {
     setError(null)
     setLoading(true)
     setThinking(true)
-    setMessages(prev => [...prev, { role: 'user', text: message }])
+    const userMsg: ChatMessage = { role: 'user', text: message }
+    const updatedMessages = [...messages, userMsg]
+    setMessages(updatedMessages)
     try {
       const reply = await sendToRafita({
         message,
@@ -105,7 +134,25 @@ function App() {
         userId: user.userId,
         token: user.token,
       })
-      setMessages(prev => [...prev, { role: 'rafita', text: reply }])
+      const rafitaMsg: ChatMessage = { role: 'rafita', text: reply }
+      const finalMessages = [...updatedMessages, rafitaMsg]
+      setMessages(finalMessages)
+
+      // Guardar conversación
+      const isNew = !currentConvId
+      const convId = currentConvId ?? (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36))
+      if (isNew) setCurrentConvId(convId)
+      const title = message.slice(0, 45) + (message.length > 45 ? '...' : '')
+      setConversations(prev => {
+        const exists = prev.find(c => c.id === convId)
+        const updated: Conversation = exists
+          ? { ...exists, messages: finalMessages, updatedAt: Date.now() }
+          : { id: convId, title, messages: finalMessages, updatedAt: Date.now() }
+        const rest = prev.filter(c => c.id !== convId)
+        const next = [updated, ...rest]
+        saveConversations(next)
+        return next
+      })
     } catch (err) {
       setError('No pude conectarme con Rafita. Intenta de nuevo.')
       console.error(err)
@@ -123,8 +170,28 @@ function App() {
     }
   }
 
-  const filteredChats = RECENT_CHATS.filter((c) =>
-    c.toLowerCase().includes(search.toLowerCase())
+  const handleNewChat = () => {
+    setMessages([])
+    setCurrentConvId(null)
+    setInput('')
+    setError(null)
+    setThinking(false)
+    setActiveMode(null)
+    setSidebarOpen(false)
+    setTimeout(() => inputRef.current?.focus(), 50)
+  }
+
+  const handleLoadChat = (conv: Conversation) => {
+    setMessages(conv.messages)
+    setCurrentConvId(conv.id)
+    setInput('')
+    setError(null)
+    setSidebarOpen(false)
+    setTimeout(() => messagesEndRef.current?.scrollIntoView(), 50)
+  }
+
+  const filteredChats = conversations.filter(c =>
+    c.title.toLowerCase().includes(search.toLowerCase())
   )
 
   return (
@@ -138,9 +205,14 @@ function App() {
         />
       )}
 
+      {/* ── Overlay sidebar mobile ── */}
+      {sidebarOpen && (
+        <div className="sidebar-overlay" onClick={() => setSidebarOpen(false)} />
+      )}
+
       {/* ── Sidebar ── */}
-      <aside className="sidebar">
-        <button className="sidebar-new-btn">
+      <aside className={`sidebar${sidebarOpen ? ' sidebar--open' : ''}`}>
+        <button className="sidebar-new-btn" onClick={handleNewChat}>
           <span className="sidebar-new-icon">+</span>
           Nueva conversación
         </button>
@@ -159,13 +231,17 @@ function App() {
           <span className="sidebar-section-label">Recientes</span>
           <ul className="sidebar-chats">
             {filteredChats.length > 0
-              ? filteredChats.map((chat, i) => (
-                  <li key={i} className="sidebar-chat-item">
+              ? filteredChats.map((conv) => (
+                  <li
+                    key={conv.id}
+                    className={`sidebar-chat-item${currentConvId === conv.id ? ' sidebar-chat-item--active' : ''}`}
+                    onClick={() => handleLoadChat(conv)}
+                  >
                     <IconChat />
-                    <span>{chat}</span>
+                    <span>{conv.title}</span>
                   </li>
                 ))
-              : <li className="sidebar-empty">Sin resultados</li>
+              : <li className="sidebar-empty">{conversations.length === 0 ? 'Aún no hay chats' : 'Sin resultados'}</li>
             }
           </ul>
         </div>
@@ -191,7 +267,12 @@ function App() {
       {/* ── Contenido principal ── */}
       <div className="main-wrapper">
         <header className="header">
-          <span className="brand">Rafita AI</span>
+          <div className="header-left">
+            <button className="hamburger-btn" onClick={() => setSidebarOpen(o => !o)} aria-label="Menú">
+              <IconMenu />
+            </button>
+            <span className="brand">Rafita AI</span>
+          </div>
           {user ? (
             <div className="header-user">
               <div className="sidebar-avatar" style={{ width: 30, height: 30, fontSize: 13 }}>

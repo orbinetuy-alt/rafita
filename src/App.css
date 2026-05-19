@@ -2,7 +2,8 @@
 .app {
   display: flex;
   flex-direction: row;
-  min-height: 100svh;
+  height: 100svh;
+  overflow: hidden;
   background: var(--bg);
 }
 
@@ -10,12 +11,14 @@
 .sidebar {
   width: 260px;
   min-width: 260px;
+  height: 100%;
   background: var(--bg-subtle);
   border-right: 1px solid var(--border);
   display: flex;
   flex-direction: column;
   padding: 20px 14px 20px;
   gap: 8px;
+  overflow: hidden;
 }
 
 .sidebar-new-btn {
@@ -121,6 +124,11 @@
   background: var(--border);
 }
 
+.sidebar-chat-item--active {
+  background: var(--border);
+  font-weight: 600;
+}
+
 .sidebar-chat-item svg {
   flex-shrink: 0;
   color: var(--text-muted);
@@ -197,6 +205,8 @@
   display: flex;
   flex-direction: column;
   min-width: 0;
+  height: 100%;
+  overflow: hidden;
 }
 
 /* ── Header ── */
@@ -205,6 +215,28 @@
   align-items: center;
   justify-content: space-between;
   padding: 20px 32px;
+  flex-shrink: 0;
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.hamburger-btn {
+  display: none;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-primary);
+  padding: 4px;
+  border-radius: 6px;
+  transition: background 0.15s;
+}
+
+.hamburger-btn:hover {
+  background: var(--border);
 }
 
 .brand {
@@ -729,8 +761,32 @@
 
 /* ── Responsive mobile ── */
 @media (max-width: 768px) {
+  /* Sidebar como drawer deslizante */
   .sidebar {
-    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    height: 100%;
+    z-index: 200;
+    transform: translateX(-100%);
+    transition: transform 0.25s ease;
+    box-shadow: 4px 0 20px rgba(0,0,0,0.15);
+  }
+
+  .sidebar--open {
+    transform: translateX(0);
+  }
+
+  /* Overlay oscuro detrás del drawer */
+  .sidebar-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.4);
+    z-index: 199;
+  }
+
+  .hamburger-btn {
+    display: flex;
   }
 
   .app {
