@@ -29,13 +29,11 @@
 
 body {
   height: 100svh;
-  overflow: hidden;
   background: var(--bg);
 }
 
 #root {
   height: 100svh;
-  overflow: hidden;
   display: flex;
   flex-direction: column;
 }
