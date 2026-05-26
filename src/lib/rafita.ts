@@ -22,7 +22,6 @@ export async function sendToRafita(payload: RafitaMessage): Promise<string> {
   })
 
   const rawText = await res.text()
-  console.log('n8n raw response:', rawText)
 
   if (!res.ok) {
     throw new Error(`Error del servidor: ${res.status} — ${rawText}`)

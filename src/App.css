@@ -129,6 +129,29 @@
   font-weight: 600;
 }
 
+.sidebar-chat-delete {
+  display: none;
+  margin-left: auto;
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-muted);
+  padding: 2px 4px;
+  border-radius: 4px;
+  line-height: 0;
+}
+
+.sidebar-chat-delete:hover {
+  color: var(--bordeaux);
+  background: rgba(116,14,11,0.1);
+}
+
+.sidebar-chat-item:hover .sidebar-chat-delete,
+.sidebar-chat-item--active .sidebar-chat-delete {
+  display: flex;
+}
+
 .sidebar-chat-item svg {
   flex-shrink: 0;
   color: var(--text-muted);
@@ -695,8 +718,34 @@
   border-radius: 16px;
   font-size: 15px;
   line-height: 1.6;
-  white-space: pre-wrap;
   word-break: break-word;
+}
+
+/* Markdown dentro de burbujas de Rafita */
+.chat-row--rafita .chat-bubble p { margin: 0 0 8px; }
+.chat-row--rafita .chat-bubble p:last-child { margin-bottom: 0; }
+.chat-row--rafita .chat-bubble ul,
+.chat-row--rafita .chat-bubble ol { padding-left: 20px; margin: 6px 0; }
+.chat-row--rafita .chat-bubble li { margin: 3px 0; }
+.chat-row--rafita .chat-bubble strong { font-weight: 700; }
+.chat-row--rafita .chat-bubble em { font-style: italic; }
+.chat-row--rafita .chat-bubble code {
+  background: var(--bg-subtle);
+  border-radius: 4px;
+  padding: 1px 5px;
+  font-size: 13px;
+  font-family: 'Menlo', monospace;
+}
+.chat-row--rafita .chat-bubble pre {
+  background: var(--bg-subtle);
+  border-radius: 8px;
+  padding: 10px 14px;
+  overflow-x: auto;
+  margin: 8px 0;
+}
+.chat-row--rafita .chat-bubble pre code {
+  background: none;
+  padding: 0;
 }
 
 .chat-row--user .chat-bubble {

@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
+import ReactMarkdown from 'react-markdown'
 import './App.css'
 import { sendToRafita } from './lib/rafita'
 import { loadUser, clearUser, type RafitaUser } from './lib/auth'
@@ -75,6 +76,13 @@ const IconMenu = () => (
 const IconLogout = () => (
   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/>
+  </svg>
+)
+
+// Icono papelera
+const IconTrash = () => (
+  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/>
   </svg>
 )
 
@@ -183,6 +191,19 @@ function App() {
     setTimeout(() => messagesEndRef.current?.scrollIntoView(), 50)
   }
 
+  const handleDeleteChat = (e: React.MouseEvent, convId: string) => {
+    e.stopPropagation()
+    setConversations(prev => {
+      const next = prev.filter(c => c.id !== convId)
+      saveConversations(next)
+      return next
+    })
+    if (currentConvId === convId) {
+      setMessages([])
+      setCurrentConvId(null)
+    }
+  }
+
   const filteredChats = conversations.filter(c =>
     c.title.toLowerCase().includes(search.toLowerCase())
   )
@@ -232,6 +253,13 @@ function App() {
                   >
                     <IconChat />
                     <span>{conv.title}</span>
+                    <button
+                      className="sidebar-chat-delete"
+                      onClick={(e) => handleDeleteChat(e, conv.id)}
+                      title="Borrar chat"
+                    >
+                      <IconTrash />
+                    </button>
                   </li>
                 ))
               : <li className="sidebar-empty">{conversations.length === 0 ? 'Aún no hay chats' : 'Sin resultados'}</li>
@@ -349,7 +377,12 @@ function App() {
                       <img src="/favicon.png" alt="Rafita" />
                     </div>
                   )}
-                  <div className="chat-bubble">{msg.text}</div>
+                  <div className="chat-bubble">
+                    {msg.role === 'rafita'
+                      ? <ReactMarkdown>{msg.text}</ReactMarkdown>
+                      : msg.text
+                    }
+                  </div>
                   {msg.role === 'user' && (
                     <div className="chat-avatar chat-avatar--user">
                       {user?.name[0].toUpperCase() ?? 'U'}
