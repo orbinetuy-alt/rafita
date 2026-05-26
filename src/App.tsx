@@ -32,16 +32,17 @@ const MODES = [
 interface ChatMessage { role: 'user' | 'rafita'; text: string }
 interface Conversation { id: string; title: string; messages: ChatMessage[]; updatedAt: number }
 
-const CONV_KEY = 'rafita_conversations'
+function convKey(userId: string) { return `rafita_conversations_${userId}` }
 
-function loadConversations(): Conversation[] {
+function loadConversations(userId: string | null): Conversation[] {
+  if (!userId) return []
   try {
-    return JSON.parse(localStorage.getItem(CONV_KEY) ?? '[]')
+    return JSON.parse(localStorage.getItem(convKey(userId)) ?? '[]')
   } catch { return [] }
 }
 
-function saveConversations(convs: Conversation[]) {
-  localStorage.setItem(CONV_KEY, JSON.stringify(convs.slice(0, 50)))
+function saveConversations(userId: string, convs: Conversation[]) {
+  localStorage.setItem(convKey(userId), JSON.stringify(convs.slice(0, 50)))
 }
 
 // Icono búsqueda
@@ -99,7 +100,7 @@ function App() {
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [thinking, setThinking] = useState(false)
   const [sidebarOpen, setSidebarOpen] = useState(false)
-  const [conversations, setConversations] = useState<Conversation[]>(loadConversations)
+  const [conversations, setConversations] = useState<Conversation[]>(() => loadConversations(loadUser()?.userId ?? null))
   const [currentConvId, setCurrentConvId] = useState<string | null>(null)
 
   useEffect(() => {
@@ -109,11 +110,17 @@ function App() {
   const handleLogin = (loggedUser: RafitaUser) => {
     setUser(loggedUser)
     setShowAuth(false)
+    setConversations(loadConversations(loggedUser.userId))
+    setMessages([])
+    setCurrentConvId(null)
   }
 
   const handleLogout = () => {
     clearUser()
     setUser(null)
+    setConversations([])
+    setMessages([])
+    setCurrentConvId(null)
   }
 
   const handleSubmit = async () => {
@@ -151,7 +158,7 @@ function App() {
           : { id: convId, title, messages: finalMessages, updatedAt: Date.now() }
         const rest = prev.filter(c => c.id !== convId)
         const next = [updated, ...rest]
-        saveConversations(next)
+        saveConversations(user.userId, next)
         return next
       })
     } catch (err) {
@@ -195,7 +202,7 @@ function App() {
     e.stopPropagation()
     setConversations(prev => {
       const next = prev.filter(c => c.id !== convId)
-      saveConversations(next)
+      saveConversations(user!.userId, next)
       return next
     })
     if (currentConvId === convId) {
